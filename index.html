@@ -1,0 +1,971 @@
+<!DOCTYPE html>
+<!--
+═══════════════════════════════════════════════════════════════════
+  BookBrief — 15-minute book summaries that learn your taste
+═══════════════════════════════════════════════════════════════════
+
+  SETUP (do once):
+
+  1. FIREBASE — at console.firebase.google.com:
+     a. Create a project (or reuse one) → Build → Firestore Database
+        → Create database (production mode).
+     b. Firestore → Rules → replace with:
+
+        rules_version = '2';
+        service cloud.firestore {
+          match /databases/{database}/documents {
+            match /bookbrief/{docId} {
+              allow read, write: if true;
+            }
+          }
+        }
+
+        → Publish.
+     c. Project settings (gear) → Your apps → Add app → Web (</>)
+        → register → copy the firebaseConfig object.
+
+  2. Paste the config values into FIREBASE_CONFIG below.
+     Each book summary is stored as its own document in the
+     "bookbrief" collection — no other setup needed.
+
+  3. ANTHROPIC API KEY — get one at console.anthropic.com,
+     then paste it into the app via the ⚙ Settings button.
+     It is stored only in your browser (localStorage), never in Firebase.
+
+  4. Deploy: push this file to
+     github.com/gomaaarchitect-coder/BookBrief (root), enable
+     Settings → Pages → main branch / root.
+═══════════════════════════════════════════════════════════════════
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BookBrief — 15-Minute Book Summaries</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Serif:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg-primary:    #0d1b2a;
+  --bg-secondary:  #1a2a3a;
+  --bg-card:       #1e3044;
+  --accent-cyan:   #00d9ff;
+  --accent-purple: #7c3aed;
+  --text-primary:  #f0f4f8;
+  --text-secondary:#8ba3be;
+  --text-muted:    #5a7a9a;
+  --border:        #2a3f55;
+  --error:         #ef4444;
+  --success:       #22c55e;
+  --warning:       #f59e0b;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.6;
+}
+:focus-visible {
+  outline: 3px solid var(--accent-cyan);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 16px 24px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+}
+.logo {
+  font-size: 1.35rem;
+  font-weight: 700;
+  margin: 0;
+}
+.logo span { color: var(--accent-cyan); }
+.header-right { display: flex; align-items: center; gap: 12px; }
+.sync-status {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--bg-card);
+}
+.sync-error { color: #fca5a5; background: #3a1e22; }
+main { max-width: 880px; margin: 0 auto; padding: 24px 16px 80px; }
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 28px;
+  border-bottom: 1px solid var(--border);
+}
+.tab {
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-weight: 600;
+  padding: 12px 18px;
+  min-height: 44px;
+  cursor: pointer;
+}
+.tab[aria-selected="true"] {
+  color: var(--accent-cyan);
+  border-bottom-color: var(--accent-cyan);
+}
+.tab:hover { color: var(--text-primary); }
+h2 { font-size: 1.15rem; margin: 0 0 14px; }
+.hint { color: var(--text-secondary); font-size: 0.92rem; margin: 0 0 20px; }
+/* Genre chips */
+fieldset.genres {
+  border: none;
+  margin: 0 0 24px;
+  padding: 0;
+}
+fieldset.genres legend {
+  font-weight: 600;
+  margin-bottom: 12px;
+  padding: 0;
+}
+.chip-row { display: flex; flex-wrap: wrap; gap: 10px; }
+.chip input { position: absolute; opacity: 0; pointer-events: none; }
+.chip span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 8px 18px;
+  border: 1.5px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 0.95rem;
+  transition: border-color .15s, background .15s;
+}
+.chip input:checked + span {
+  border-color: var(--accent-cyan);
+  background: #0a3340;
+  color: var(--accent-cyan);
+  font-weight: 600;
+}
+.chip input:focus-visible + span {
+  outline: 3px solid var(--accent-cyan);
+  outline-offset: 2px;
+}
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 12px 26px;
+  border-radius: 10px;
+  border: none;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.btn-primary { background: var(--accent-cyan); color: #06222c; font-size: 1.05rem; }
+.btn-primary:hover { background: #4ce4ff; }
+.btn-primary:disabled { background: var(--text-muted); color: var(--bg-primary); cursor: not-allowed; }
+.btn-secondary {
+  background: var(--bg-card);
+  color: var(--text-primary);
+  border: 1.5px solid var(--border);
+}
+.btn-secondary:hover { border-color: var(--accent-cyan); }
+.btn-icon {
+  background: var(--bg-card);
+  border: 1.5px solid var(--border);
+  color: var(--text-primary);
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 1.1rem;
+}
+.btn-icon:hover { border-color: var(--accent-cyan); }
+.gen-status {
+  margin-top: 18px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  display: none;
+}
+.gen-status.active { display: block; }
+.gen-status.error { border-color: var(--error); color: #fca5a5; }
+.taste {
+  margin-top: 32px;
+  padding: 16px 18px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+.taste strong { color: var(--text-primary); }
+/* Library */
+.lib-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.card h3 { margin: 0; font-size: 1.05rem; line-height: 1.35; }
+.card .author { color: var(--text-secondary); font-size: 0.9rem; margin: 0; }
+.badge {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--accent-cyan);
+  background: #0a3340;
+  border-radius: 6px;
+  padding: 3px 9px;
+  align-self: flex-start;
+}
+.card .meta { font-size: 0.8rem; color: var(--text-muted); margin: 0; }
+.card-actions { display: flex; gap: 8px; margin-top: auto; flex-wrap: wrap; }
+.rate-row { display: flex; gap: 8px; align-items: center; }
+.rate-btn {
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 10px;
+  border: 1.5px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 1.05rem;
+  cursor: pointer;
+}
+.rate-btn:hover { border-color: var(--accent-cyan); }
+.rate-btn[aria-pressed="true"].like { border-color: var(--success); background: #11331f; }
+.rate-btn[aria-pressed="true"].dislike { border-color: var(--error); background: #3a1e22; }
+.empty {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--text-secondary);
+  border: 1.5px dashed var(--border);
+  border-radius: 14px;
+}
+/* Reader */
+.reader-top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+.reader-meta { color: var(--text-secondary); font-size: 0.92rem; margin: 4px 0 18px; }
+.reader-rate { display: flex; gap: 10px; align-items: center; margin: 6px 0 26px; flex-wrap: wrap; }
+.reader-rate .label { color: var(--text-secondary); font-size: 0.9rem; }
+article.summary {
+  font-family: 'IBM Plex Serif', Georgia, serif;
+  font-size: 1.06rem;
+  line-height: 1.85;
+  max-width: 720px;
+}
+article.summary h1, article.summary h2, article.summary h3 {
+  font-family: 'IBM Plex Sans', sans-serif;
+  color: var(--accent-cyan);
+  line-height: 1.3;
+  margin: 1.8em 0 0.6em;
+}
+article.summary h2 { font-size: 1.3rem; }
+article.summary h3 { font-size: 1.1rem; }
+article.summary blockquote {
+  border-left: 3px solid var(--accent-purple);
+  margin: 1.2em 0;
+  padding: 4px 0 4px 18px;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+article.summary code {
+  background: var(--bg-card);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+article.summary ul, article.summary ol { padding-left: 1.4em; }
+.cursor-blink::after { content: "▋"; color: var(--accent-cyan); animation: blink 1s step-start infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+/* Modal */
+dialog {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 26px;
+  max-width: 480px;
+  width: calc(100% - 40px);
+}
+dialog::backdrop { background: rgba(4, 10, 18, 0.75); }
+dialog h2 { margin-top: 0; }
+dialog label { display: block; font-weight: 600; margin: 16px 0 6px; }
+dialog input[type="password"], dialog input[type="text"] {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1.5px solid var(--border);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font: inherit;
+}
+dialog .note { font-size: 0.85rem; color: var(--text-muted); margin: 8px 0 0; }
+dialog .dialog-actions { display: flex; gap: 10px; margin-top: 22px; justify-content: flex-end; }
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px;
+  margin: -1px; padding: 0; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+.view { display: none; }
+.view.active { display: block; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1 class="logo">📚 Book<span>Brief</span></h1>
+  <div class="header-right">
+    <span id="sync-status" class="sync-status" aria-live="polite">🔄 Loading…</span>
+    <button class="btn-icon" id="settings-btn" aria-label="Settings: set your Anthropic API key">⚙️</button>
+  </div>
+</header>
+
+<main>
+  <nav class="tabs" role="tablist" aria-label="Main sections">
+    <button class="tab" id="tab-generate" role="tab" aria-selected="true" aria-controls="view-generate">✨ Generate</button>
+    <button class="tab" id="tab-library" role="tab" aria-selected="false" aria-controls="view-library">📖 Library (<span id="lib-count">0</span>)</button>
+  </nav>
+
+  <!-- GENERATE VIEW -->
+  <section class="view active" id="view-generate" role="tabpanel" aria-labelledby="tab-generate">
+    <h2>Get a 15-minute read summary of a famous book</h2>
+    <p class="hint">Pick a genre and press Generate. BookBrief chooses a celebrated book you haven't read here yet, writes a full ~3,000-word summary, and saves it to your library. Rate summaries 👍/👎 to teach it your taste.</p>
+
+    <fieldset class="genres">
+      <legend>Genre</legend>
+      <div class="chip-row" id="genre-chips"></div>
+    </fieldset>
+
+    <button class="btn btn-primary" id="generate-btn">✨ Generate summary</button>
+    <div class="gen-status" id="gen-status" role="status" aria-live="polite"></div>
+
+    <div class="taste" id="taste-box"></div>
+  </section>
+
+  <!-- LIBRARY VIEW -->
+  <section class="view" id="view-library" role="tabpanel" aria-labelledby="tab-library">
+    <h2>Your library</h2>
+    <p class="hint">Every generated summary lands here for future reading.</p>
+    <div id="lib-content"></div>
+  </section>
+
+  <!-- READER VIEW -->
+  <section class="view" id="view-reader" aria-label="Summary reader">
+    <div class="reader-top">
+      <button class="btn btn-secondary" id="back-btn">← Back</button>
+    </div>
+    <h2 id="reader-title" style="font-size:1.6rem; margin-bottom:0;"></h2>
+    <p class="reader-meta" id="reader-meta"></p>
+    <div class="reader-rate" id="reader-rate" hidden>
+      <span class="label">Did you enjoy this summary?</span>
+      <button class="rate-btn like" id="reader-like" aria-pressed="false" aria-label="I liked this summary">👍</button>
+      <button class="rate-btn dislike" id="reader-dislike" aria-pressed="false" aria-label="I disliked this summary">👎</button>
+    </div>
+    <article class="summary" id="reader-body"></article>
+  </section>
+</main>
+
+<!-- SETTINGS MODAL -->
+<dialog id="settings-modal" aria-labelledby="settings-title">
+  <h2 id="settings-title">Settings</h2>
+  <label for="api-key-input">Anthropic API key</label>
+  <input type="password" id="api-key-input" autocomplete="off" placeholder="sk-ant-…">
+  <p class="note">Stored only in this browser (localStorage) — never sent to Firebase or anywhere except the Claude API. Get a key at console.anthropic.com.</p>
+  <div class="dialog-actions">
+    <button class="btn btn-secondary" id="settings-cancel">Cancel</button>
+    <button class="btn btn-primary" id="settings-save">Save</button>
+  </div>
+</dialog>
+
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+import { getFirestore, collection, getDocs, doc, setDoc, deleteDoc } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+
+/* ════════════ CONFIG — fill this in ════════════ */
+const FIREBASE_CONFIG = {
+  apiKey:            'PASTE_YOUR_FIREBASE_API_KEY',
+  authDomain:        'PASTE_YOUR_PROJECT.firebaseapp.com',
+  projectId:         'PASTE_YOUR_PROJECT_ID',
+  storageBucket:     'PASTE_YOUR_PROJECT.appspot.com',
+  messagingSenderId: 'PASTE_SENDER_ID',
+  appId:             'PASTE_APP_ID'
+};
+/* ═════════════════════════════════════════════════ */
+
+const MODEL = 'claude-sonnet-4-6';
+const GENRES = [
+  'Self-help & Psychology',
+  'Business & Leadership',
+  'Fiction & Classics',
+  'Science, History & Philosophy'
+];
+const SURPRISE = '__surprise__';
+
+const fbApp = initializeApp(FIREBASE_CONFIG);
+const db = getFirestore(fbApp);
+const COLLECTION = 'bookbrief';
+
+let appData = { library: [] };
+let currentBookId = null;   // book shown in reader
+let generating = false;
+
+/* ──────────────── Sync ──────────────── */
+function showSyncStatus(state, msg = '') {
+  const el = document.getElementById('sync-status');
+  if (!el) return;
+  const states = {
+    loading: '🔄 Loading…',
+    synced:  '✅ Synced',
+    error:   '⚠️ ' + msg,
+    offline: '📵 Offline'
+  };
+  el.textContent = states[state] || state;
+  el.className = 'sync-status' + (state === 'error' ? ' sync-error' : '');
+}
+
+async function loadData() {
+  try {
+    const snap = await getDocs(collection(db, COLLECTION));
+    appData.library = snap.docs
+      .map(d => d.data())
+      .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+    renderAll();
+    showSyncStatus('synced');
+  } catch (e) {
+    showSyncStatus('error', e.message);
+  }
+}
+
+async function saveBook(book) {
+  try {
+    await setDoc(doc(db, COLLECTION, book.id), book);
+    showSyncStatus('synced');
+  } catch (e) {
+    showSyncStatus('error', e.message);
+  }
+}
+
+async function removeBook(bookId) {
+  try {
+    await deleteDoc(doc(db, COLLECTION, bookId));
+    showSyncStatus('synced');
+  } catch (e) {
+    showSyncStatus('error', e.message);
+  }
+}
+
+/* ──────────────── Preferences ──────────────── */
+function getPrefs() {
+  const liked = [], disliked = [];
+  const genreScores = {};
+  GENRES.forEach(g => { genreScores[g] = 0; });
+  appData.library.forEach(b => {
+    if (b.rating === 'like') {
+      liked.push(b.title + ' by ' + b.author);
+      if (genreScores[b.genre] !== undefined) genreScores[b.genre] += 1;
+    } else if (b.rating === 'dislike') {
+      disliked.push(b.title + ' by ' + b.author);
+      if (genreScores[b.genre] !== undefined) genreScores[b.genre] -= 1;
+    }
+  });
+  return { liked, disliked, genreScores };
+}
+
+function pickWeightedGenre() {
+  const { genreScores } = getPrefs();
+  const weights = GENRES.map(g => Math.max(0.25, 1 + 1.5 * genreScores[g]));
+  const total = weights.reduce((a, b) => a + b, 0);
+  let r = Math.random() * total;
+  for (let i = 0; i < GENRES.length; i++) {
+    r -= weights[i];
+    if (r <= 0) return GENRES[i];
+  }
+  return GENRES[GENRES.length - 1];
+}
+
+function renderTasteBox() {
+  const box = document.getElementById('taste-box');
+  const { liked, disliked } = getPrefs();
+  if (liked.length === 0 && disliked.length === 0) {
+    box.innerHTML = '<strong>🧠 Taste profile:</strong> no ratings yet. Like or dislike summaries and future picks will adapt.';
+    return;
+  }
+  let html = '<strong>🧠 Taste profile</strong> — guiding future picks:<br>';
+  if (liked.length) html += '👍 Liked: ' + escapeHtml(liked.slice(-5).join('; ')) + '<br>';
+  if (disliked.length) html += '👎 Disliked: ' + escapeHtml(disliked.slice(-5).join('; '));
+  box.innerHTML = html;
+}
+
+/* ──────────────── Claude API ──────────────── */
+function getApiKey() { return localStorage.getItem('bb_api_key') || ''; }
+
+function anthropicHeaders() {
+  return {
+    'content-type': 'application/json',
+    'x-api-key': getApiKey(),
+    'anthropic-version': '2023-06-01',
+    'anthropic-dangerous-direct-browser-access': 'true'
+  };
+}
+
+async function claudeOnce(prompt, maxTokens) {
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: anthropicHeaders(),
+    body: JSON.stringify({
+      model: MODEL,
+      max_tokens: maxTokens,
+      messages: [{ role: 'user', content: prompt }]
+    })
+  });
+  const json = await res.json();
+  if (!res.ok) {
+    throw new Error((json.error && json.error.message) || ('API error ' + res.status));
+  }
+  return json.content.map(c => c.text || '').join('');
+}
+
+async function claudeStream(prompt, maxTokens, onDelta) {
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: anthropicHeaders(),
+    body: JSON.stringify({
+      model: MODEL,
+      max_tokens: maxTokens,
+      stream: true,
+      messages: [{ role: 'user', content: prompt }]
+    })
+  });
+  if (!res.ok) {
+    let msg = 'API error ' + res.status;
+    try {
+      const j = await res.json();
+      if (j.error && j.error.message) msg = j.error.message;
+    } catch (e) { /* keep default msg */ }
+    throw new Error(msg);
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop();
+    for (const line of lines) {
+      if (!line.startsWith('data:')) continue;
+      const payload = line.slice(5).trim();
+      if (!payload || payload === '[DONE]') continue;
+      let evt;
+      try { evt = JSON.parse(payload); } catch (e) { continue; }
+      if (evt.type === 'content_block_delta' && evt.delta && evt.delta.type === 'text_delta') {
+        onDelta(evt.delta.text);
+      }
+      if (evt.type === 'error') {
+        throw new Error((evt.error && evt.error.message) || 'Stream error');
+      }
+    }
+  }
+}
+
+function extractJson(text) {
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start === -1 || end === -1) throw new Error('Could not parse book selection from the model.');
+  return JSON.parse(text.slice(start, end + 1));
+}
+
+/* ──────────────── Generation flow ──────────────── */
+async function generate() {
+  if (generating) return;
+  if (!getApiKey()) {
+    setGenStatus('error', 'No API key set. Click ⚙️ Settings and paste your Anthropic API key first.');
+    openSettings();
+    return;
+  }
+
+  const checked = document.querySelector('input[name="genre"]:checked');
+  let genre = checked ? checked.value : SURPRISE;
+  if (genre === SURPRISE) genre = pickWeightedGenre();
+
+  generating = true;
+  const btn = document.getElementById('generate-btn');
+  btn.disabled = true;
+
+  try {
+    setGenStatus('active', '📖 Choosing a famous ' + genre + ' book for you…');
+
+    const { liked, disliked } = getPrefs();
+    const already = appData.library.map(b => b.title + ' by ' + b.author);
+
+    const pickPrompt =
+      'You are choosing one famous, widely acclaimed book for a reader.\n' +
+      'Genre: ' + genre + '\n' +
+      (liked.length ? 'The reader LIKED summaries of: ' + liked.join('; ') + '. Favor books with similar themes, tone, or appeal.\n' : '') +
+      (disliked.length ? 'The reader DISLIKED summaries of: ' + disliked.join('; ') + '. Avoid books similar to these.\n' : '') +
+      (already.length ? 'Do NOT pick any of these (already in their library): ' + already.join('; ') + '.\n' : '') +
+      'Reply with ONLY minified JSON, no markdown fences, in this exact shape: ' +
+      '{"title":"...","author":"...","year":1234,"hook":"one sentence on why this book fits this reader"}';
+
+    const pickRaw = await claudeOnce(pickPrompt, 300);
+    const pick = extractJson(pickRaw);
+
+    // Switch to reader and stream the summary in
+    currentBookId = null;
+    showView('reader');
+    document.getElementById('reader-title').textContent = pick.title;
+    document.getElementById('reader-meta').textContent =
+      'by ' + pick.author + (pick.year ? ' (' + pick.year + ')' : '') + ' · ' + genre + ' · writing your 15-minute summary…';
+    document.getElementById('reader-rate').hidden = true;
+    const body = document.getElementById('reader-body');
+    body.textContent = '';
+    body.classList.add('cursor-blink');
+    setGenStatus('active', '✍️ Writing the summary — it will appear as it is written.');
+
+    const sumPrompt =
+      'Write a comprehensive 15-minute-read summary (about 3,000 words) of the book "' +
+      pick.title + '" by ' + pick.author + '.\n' +
+      'Format in Markdown. Structure:\n' +
+      '- Open with 1-2 paragraphs on what the book is and why it matters (no heading).\n' +
+      '- Then ## section headings walking through the book\'s key ideas or narrative arc in depth.\n' +
+      '- End with "## Key Takeaways" (a concise bulleted list) and "## Memorable Quotes" (3-5 short quotes as blockquotes).\n' +
+      'Write engaging, clear prose. Do not include any preamble like "Here is" — start directly with the summary.';
+
+    let md = '';
+    let renderPending = false;
+    await claudeStream(sumPrompt, 8000, function (chunk) {
+      md += chunk;
+      if (!renderPending) {
+        renderPending = true;
+        requestAnimationFrame(function () {
+          body.innerHTML = mdToHtml(md);
+          renderPending = false;
+        });
+      }
+    });
+    body.innerHTML = mdToHtml(md);
+    body.classList.remove('cursor-blink');
+
+    const words = md.split(/\s+/).filter(Boolean).length;
+    const book = {
+      id: 'b' + Date.now(),
+      title: pick.title,
+      author: pick.author,
+      year: pick.year || null,
+      genre: genre,
+      hook: pick.hook || '',
+      summary: md,
+      words: words,
+      rating: null,
+      createdAt: new Date().toISOString()
+    };
+    appData.library.unshift(book);
+    currentBookId = book.id;
+    saveBook(book);
+
+    document.getElementById('reader-meta').textContent =
+      'by ' + book.author + (book.year ? ' (' + book.year + ')' : '') + ' · ' + genre +
+      ' · ' + words.toLocaleString() + ' words · ~' + Math.max(1, Math.round(words / 200)) + ' min read · saved to library';
+    document.getElementById('reader-rate').hidden = false;
+    updateReaderRateButtons(book);
+    renderAll();
+    setGenStatus('hide');
+  } catch (e) {
+    showView('generate');
+    setGenStatus('error', '⚠️ ' + e.message);
+  } finally {
+    generating = false;
+    btn.disabled = false;
+  }
+}
+
+function setGenStatus(state, msg) {
+  const el = document.getElementById('gen-status');
+  if (state === 'hide') {
+    el.className = 'gen-status';
+    el.textContent = '';
+    return;
+  }
+  el.className = 'gen-status active' + (state === 'error' ? ' error' : '');
+  el.textContent = msg;
+}
+
+/* ──────────────── Rating ──────────────── */
+function setRating(bookId, rating) {
+  const book = appData.library.find(b => b.id === bookId);
+  if (!book) return;
+  book.rating = (book.rating === rating) ? null : rating;
+  saveBook(book);
+  renderAll();
+  if (currentBookId === bookId) updateReaderRateButtons(book);
+}
+
+function updateReaderRateButtons(book) {
+  document.getElementById('reader-like').setAttribute('aria-pressed', String(book.rating === 'like'));
+  document.getElementById('reader-dislike').setAttribute('aria-pressed', String(book.rating === 'dislike'));
+}
+
+/* ──────────────── Library ──────────────── */
+function renderLibrary() {
+  const wrap = document.getElementById('lib-content');
+  document.getElementById('lib-count').textContent = appData.library.length;
+
+  if (appData.library.length === 0) {
+    wrap.innerHTML = '<div class="empty">📚 Your library is empty.<br>Generate your first summary to start your collection.</div>';
+    return;
+  }
+
+  const grid = document.createElement('div');
+  grid.className = 'lib-grid';
+
+  appData.library.forEach(function (b) {
+    const card = document.createElement('div');
+    card.className = 'card';
+
+    const badge = document.createElement('span');
+    badge.className = 'badge';
+    badge.textContent = b.genre;
+
+    const h3 = document.createElement('h3');
+    h3.textContent = b.title;
+
+    const author = document.createElement('p');
+    author.className = 'author';
+    author.textContent = 'by ' + b.author + (b.year ? ' (' + b.year + ')' : '');
+
+    const meta = document.createElement('p');
+    meta.className = 'meta';
+    meta.textContent = '~' + Math.max(1, Math.round((b.words || 0) / 200)) + ' min read · added ' +
+      new Date(b.createdAt).toLocaleDateString();
+
+    const actions = document.createElement('div');
+    actions.className = 'card-actions';
+
+    const readBtn = document.createElement('button');
+    readBtn.className = 'btn btn-secondary';
+    readBtn.textContent = '📖 Read';
+    readBtn.setAttribute('aria-label', 'Read summary of ' + b.title);
+    readBtn.addEventListener('click', function () { openReader(b.id); });
+
+    const likeBtn = document.createElement('button');
+    likeBtn.className = 'rate-btn like';
+    likeBtn.textContent = '👍';
+    likeBtn.setAttribute('aria-label', 'Like summary of ' + b.title);
+    likeBtn.setAttribute('aria-pressed', String(b.rating === 'like'));
+    likeBtn.addEventListener('click', function () { setRating(b.id, 'like'); });
+
+    const dislikeBtn = document.createElement('button');
+    dislikeBtn.className = 'rate-btn dislike';
+    dislikeBtn.textContent = '👎';
+    dislikeBtn.setAttribute('aria-label', 'Dislike summary of ' + b.title);
+    dislikeBtn.setAttribute('aria-pressed', String(b.rating === 'dislike'));
+    dislikeBtn.addEventListener('click', function () { setRating(b.id, 'dislike'); });
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'rate-btn';
+    delBtn.textContent = '🗑️';
+    delBtn.setAttribute('aria-label', 'Delete summary of ' + b.title);
+    delBtn.addEventListener('click', function () {
+      if (confirm('Delete "' + b.title + '" from your library?')) {
+        appData.library = appData.library.filter(x => x.id !== b.id);
+        removeBook(b.id);
+        renderAll();
+      }
+    });
+
+    actions.appendChild(readBtn);
+    actions.appendChild(likeBtn);
+    actions.appendChild(dislikeBtn);
+    actions.appendChild(delBtn);
+
+    card.appendChild(badge);
+    card.appendChild(h3);
+    card.appendChild(author);
+    card.appendChild(meta);
+    card.appendChild(actions);
+    grid.appendChild(card);
+  });
+
+  wrap.innerHTML = '';
+  wrap.appendChild(grid);
+}
+
+function openReader(bookId) {
+  const book = appData.library.find(b => b.id === bookId);
+  if (!book) return;
+  currentBookId = bookId;
+  document.getElementById('reader-title').textContent = book.title;
+  document.getElementById('reader-meta').textContent =
+    'by ' + book.author + (book.year ? ' (' + book.year + ')' : '') + ' · ' + book.genre +
+    ' · ' + (book.words || 0).toLocaleString() + ' words · ~' + Math.max(1, Math.round((book.words || 0) / 200)) + ' min read';
+  document.getElementById('reader-body').innerHTML = mdToHtml(book.summary);
+  document.getElementById('reader-body').classList.remove('cursor-blink');
+  document.getElementById('reader-rate').hidden = false;
+  updateReaderRateButtons(book);
+  showView('reader');
+  window.scrollTo(0, 0);
+}
+
+/* ──────────────── Markdown rendering ──────────────── */
+function escapeHtml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function inlineMd(s) {
+  return s
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>');
+}
+
+function mdToHtml(md) {
+  const lines = escapeHtml(md).split('\n');
+  let html = '';
+  let para = [];
+  let listType = null; // 'ul' | 'ol'
+
+  function flushPara() {
+    if (para.length) {
+      html += '<p>' + inlineMd(para.join(' ')) + '</p>';
+      para = [];
+    }
+  }
+  function closeList() {
+    if (listType) {
+      html += '</' + listType + '>';
+      listType = null;
+    }
+  }
+
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+    const t = line.trim();
+
+    if (t === '') { flushPara(); closeList(); continue; }
+
+    const h = t.match(/^(#{1,3})\s+(.*)/);
+    if (h) {
+      flushPara(); closeList();
+      const lvl = Math.min(h[1].length + 1, 4); // # -> h2 (page already has h2 title)
+      html += '<h' + lvl + '>' + inlineMd(h[2]) + '</h' + lvl + '>';
+      continue;
+    }
+
+    if (t.startsWith('&gt;')) {
+      flushPara(); closeList();
+      html += '<blockquote><p>' + inlineMd(t.replace(/^&gt;\s?/, '')) + '</p></blockquote>';
+      continue;
+    }
+
+    const ul = t.match(/^[-*]\s+(.*)/);
+    const ol = t.match(/^\d+\.\s+(.*)/);
+    if (ul || ol) {
+      flushPara();
+      const want = ul ? 'ul' : 'ol';
+      if (listType !== want) { closeList(); html += '<' + want + '>'; listType = want; }
+      html += '<li>' + inlineMd(ul ? ul[1] : ol[1]) + '</li>';
+      continue;
+    }
+
+    if (/^---+$/.test(t)) { flushPara(); closeList(); html += '<hr>'; continue; }
+
+    closeList();
+    para.push(t);
+  }
+  flushPara();
+  closeList();
+  return html;
+}
+
+/* ──────────────── Views & UI wiring ──────────────── */
+function showView(name) {
+  ['generate', 'library', 'reader'].forEach(function (v) {
+    document.getElementById('view-' + v).classList.toggle('active', v === name);
+  });
+  if (name === 'generate' || name === 'library') {
+    document.getElementById('tab-generate').setAttribute('aria-selected', String(name === 'generate'));
+    document.getElementById('tab-library').setAttribute('aria-selected', String(name === 'library'));
+  }
+}
+
+function renderGenreChips() {
+  const row = document.getElementById('genre-chips');
+  const options = GENRES.concat([SURPRISE]);
+  row.innerHTML = '';
+  options.forEach(function (g, i) {
+    const label = document.createElement('label');
+    label.className = 'chip';
+    const input = document.createElement('input');
+    input.type = 'radio';
+    input.name = 'genre';
+    input.value = g;
+    if (i === 0) input.checked = true;
+    const span = document.createElement('span');
+    span.textContent = g === SURPRISE ? '🎲 Surprise me' : g;
+    label.appendChild(input);
+    label.appendChild(span);
+    row.appendChild(label);
+  });
+}
+
+function renderAll() {
+  renderLibrary();
+  renderTasteBox();
+}
+
+/* Settings modal */
+const modal = document.getElementById('settings-modal');
+function openSettings() {
+  document.getElementById('api-key-input').value = getApiKey();
+  modal.showModal();
+}
+document.getElementById('settings-btn').addEventListener('click', openSettings);
+document.getElementById('settings-cancel').addEventListener('click', function () { modal.close(); });
+document.getElementById('settings-save').addEventListener('click', function () {
+  localStorage.setItem('bb_api_key', document.getElementById('api-key-input').value.trim());
+  modal.close();
+  setGenStatus('hide');
+});
+
+document.getElementById('tab-generate').addEventListener('click', function () { showView('generate'); });
+document.getElementById('tab-library').addEventListener('click', function () { showView('library'); });
+document.getElementById('back-btn').addEventListener('click', function () { showView('library'); });
+document.getElementById('generate-btn').addEventListener('click', generate);
+document.getElementById('reader-like').addEventListener('click', function () {
+  if (currentBookId) setRating(currentBookId, 'like');
+});
+document.getElementById('reader-dislike').addEventListener('click', function () {
+  if (currentBookId) setRating(currentBookId, 'dislike');
+});
+
+/* Init */
+renderGenreChips();
+renderAll();
+loadData();
+</script>
+</body>
+</html>
