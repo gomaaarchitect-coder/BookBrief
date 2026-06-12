@@ -27,6 +27,8 @@
   2. Paste the config values into FIREBASE_CONFIG below.
      Each book summary is stored as its own document in the
      "bookbrief" collection — no other setup needed.
+     ⚠️ Until you do this, nothing saves — the app will show
+     "Firebase not configured" in the sync badge.
 
   3. ANTHROPIC API KEY — get one at console.anthropic.com,
      then paste it into the app via the ⚙ Settings button.
@@ -406,12 +408,12 @@ import { getFirestore, collection, getDocs, doc, setDoc, deleteDoc } from 'https
 
 /* ════════════ CONFIG — fill this in ════════════ */
 const FIREBASE_CONFIG = {
-  apiKey:            'PASTE_YOUR_FIREBASE_API_KEY',
-  authDomain:        'PASTE_YOUR_PROJECT.firebaseapp.com',
-  projectId:         'PASTE_YOUR_PROJECT_ID',
-  storageBucket:     'PASTE_YOUR_PROJECT.appspot.com',
-  messagingSenderId: 'PASTE_SENDER_ID',
-  appId:             'PASTE_APP_ID'
+  apiKey:            'AIzaSyAr7uo6ZdFCeE-lBaa90uR8DG6md5mVhvs',
+  authDomain:        'bookgenerate-fbed7.firebaseapp.com',
+  projectId:         'bookgenerate-fbed7',
+  storageBucket:     'bookgenerate-fbed7.firebasestorage.app',
+  messagingSenderId: '874387030283',
+  appId:             '1:874387030283:web:78001881bae32e66c9620e'
 };
 /* ═════════════════════════════════════════════════ */
 
@@ -424,9 +426,9 @@ const GENRES = [
 ];
 const SURPRISE = '__surprise__';
 
-const fbApp = initializeApp(FIREBASE_CONFIG);
-const db = getFirestore(fbApp);
 const COLLECTION = 'bookbrief';
+const configMissing = Object.values(FIREBASE_CONFIG).some(v => String(v).indexOf('PASTE_') === 0);
+const db = configMissing ? null : getFirestore(initializeApp(FIREBASE_CONFIG));
 
 let appData = { library: [] };
 let currentBookId = null;   // book shown in reader
@@ -446,7 +448,12 @@ function showSyncStatus(state, msg = '') {
   el.className = 'sync-status' + (state === 'error' ? ' sync-error' : '');
 }
 
+function configError() {
+  showSyncStatus('error', 'Firebase not configured — open index.html and paste your firebaseConfig values into FIREBASE_CONFIG. Books will NOT be saved until then.');
+}
+
 async function loadData() {
+  if (configMissing) { configError(); return; }
   try {
     const snap = await getDocs(collection(db, COLLECTION));
     appData.library = snap.docs
@@ -460,6 +467,7 @@ async function loadData() {
 }
 
 async function saveBook(book) {
+  if (configMissing) { configError(); return; }
   try {
     await setDoc(doc(db, COLLECTION, book.id), book);
     showSyncStatus('synced');
@@ -469,6 +477,7 @@ async function saveBook(book) {
 }
 
 async function removeBook(bookId) {
+  if (configMissing) { configError(); return; }
   try {
     await deleteDoc(doc(db, COLLECTION, bookId));
     showSyncStatus('synced');
